@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+pydantic
+pydantic-settings
+python-multipart
+gitpython
+pathspec
+pgvector
+openai
+tiktoken
+pytest
+httpx

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: repopilot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: repopilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - repopilot_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  repopilot_postgres_data:

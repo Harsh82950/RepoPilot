@@ -1,0 +1,65 @@
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from app.services.embeddings.embedding_provider import EmbeddingProvider
+from app.services.llm.llm_provider import LLMProvider
+from app.services.rag.context_builder import build_rag_context
+from app.services.rag.rag_prompt import build_rag_prompt
+from app.services.retrieval.semantic_retriever import retrieve_hybrid_chunks
+
+
+def answer_repository_question(
+    db: Session,
+    repository_id: str,
+    question: str,
+    embedding_provider: EmbeddingProvider,
+    llm_provider: LLMProvider,
+    top_k: int = 5,
+    candidate_k: int = 20,
+) -> dict[str, Any]:
+    """
+    Answer a repository question using retrieval-augmented generation.
+
+    Pipeline:
+        Question
+            ↓
+        Hybrid Retrieval
+            ↓
+        RAG Context
+            ↓
+        RAG Prompt
+            ↓
+        LLM
+    """
+
+    if not question or not question.strip():
+        raise ValueError("Question cannot be empty.")
+
+    retrieval_result = retrieve_hybrid_chunks(
+        db=db,
+        repository_id=repository_id,
+        query=question,
+        embedding_provider=embedding_provider,
+        top_k=top_k,
+        candidate_k=candidate_k,
+    )
+
+    results = retrieval_result["results"]
+
+    context = build_rag_context(results)
+
+    prompt = build_rag_prompt(
+        question=question,
+        context=context,
+    )
+
+    answer = llm_provider.generate(prompt)
+
+    return {
+        "question": question,
+        "answer": answer,
+        "sources": results,
+        "keywords": retrieval_result["keywords"],
+        "actions": retrieval_result["actions"],
+    }

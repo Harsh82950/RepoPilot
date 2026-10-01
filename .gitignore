@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model / ML files
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+
+# Generated embeddings / datasets
+embeddings.json
+chunks_for_embedding.json
+*.npy
+
+# Downloaded repositories / temporary data
+downloads/
+repos/
+tmp/
+temp/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Docker / local database data
+postgres-data/
+pgdata/
+
+# Local generated files
+*.sqlite
+*.db
