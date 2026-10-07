@@ -3,13 +3,16 @@ from typing import Any
 
 def build_rag_context(results: list[dict[str, Any]]) -> str:
     """
-    Build a structured context string from retrieved repository chunks.
+    Build a source-aware context string from retrieved repository chunks.
 
     Each result should contain:
     - file_path
     - start_line
     - end_line
     - content
+
+    Every retrieved chunk receives a unique source ID so that the LLM
+    can associate claims with the exact repository evidence supporting them.
     """
 
     if not results:
@@ -27,8 +30,10 @@ def build_rag_context(results: list[dict[str, Any]]) -> str:
             f"[Source {index}]\n"
             f"File: {file_path}\n"
             f"Lines: {start_line}-{end_line}\n"
-            f"\n"
+            f"Evidence:\n"
             f"{content}"
         )
 
-    return "\n\n" + ("\n\n" + "=" * 80 + "\n\n").join(context_parts)
+    separator = "\n\n" + "=" * 80 + "\n\n"
+
+    return separator.join(context_parts)

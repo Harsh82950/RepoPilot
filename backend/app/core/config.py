@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/repopilot"
     OPENAI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
 
     REPO_STORAGE_PATH: str = "./storage/repos"
     MAX_FILE_SIZE_BYTES: int = 2 * 1024 * 1024  # 2 MB per file for initial scan

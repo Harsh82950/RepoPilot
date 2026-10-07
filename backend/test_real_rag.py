@@ -1,6 +1,6 @@
 from app.db.session import SessionLocal
 from app.services.embeddings.embedding_service import QwenEmbeddingProvider
-from app.services.llm.ollama_provider import OllamaProvider
+from app.services.llm.groq_provider import GroqProvider
 from app.services.rag.rag_service import answer_repository_question
 
 
@@ -12,9 +12,9 @@ def main():
 
     try:
         embedding_provider = QwenEmbeddingProvider()
-        llm_provider = OllamaProvider()
+        llm_provider = llm_provider = GroqProvider()
 
-        question = "Where is the wallet balance updated?"
+        question = question = "Where is balance.increment used in the wallet repository?"
 
         result = answer_repository_question(
             db=db,
@@ -22,7 +22,7 @@ def main():
             question=question,
             embedding_provider=embedding_provider,
             llm_provider=llm_provider,
-            top_k=5,
+            top_k=3,
             candidate_k=20,
         )
 
@@ -41,6 +41,18 @@ def main():
         print(result["answer"])
 
         print()
+        print("Evidence:")
+        print("-" * 80)
+
+        for evidence in result["evidence"]:
+            print(f"\n[{evidence['source_id']}]")
+            print(f"File  : {evidence['file_path']}")
+            print(
+                f"Lines : "
+                f"{evidence['start_line']}-{evidence['end_line']}"
+            )
+
+        print()
         print("Sources:")
         print("-" * 80)
 
@@ -52,6 +64,10 @@ def main():
             print(f"Similarity : {source['semantic_similarity']:.4f}")
             print(f"Keyword    : {source['keyword_score']:.4f}")
             print(f"Action     : {source['action_score']:.4f}")
+            print(
+                 f"Code Expr  : "
+                 f"{source['code_expression_score']:.4f}"
+            )
             print(f"Hybrid     : {source['hybrid_score']:.4f}")
 
         print()

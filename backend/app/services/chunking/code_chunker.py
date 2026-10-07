@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 
 
@@ -28,19 +29,52 @@ STRUCTURAL_PREFIXES = (
 )
 
 
+TYPESCRIPT_METHOD_PATTERN = re.compile(
+    r"^(?:"
+    r"async\s+|"
+    r"public\s+|"
+    r"private\s+|"
+    r"protected\s+|"
+    r"static\s+"
+    r")?"
+    r"[A-Za-z_$][\w$]*\s*"
+    r"\([^;]*\)\s*"
+    r"(?:[:][^{]+)?\s*\{"
+)
+
+
 def is_structural_boundary(
     line: str,
 ) -> bool:
     """
     Return True when a line looks like the beginning of a
-    meaningful code structure such as a function or class.
+    meaningful code structure such as a function, class,
+    interface, type, or TypeScript/JavaScript method.
     """
 
     stripped_line = line.strip()
 
-    return any(
+    if any(
         stripped_line.startswith(prefix)
         for prefix in STRUCTURAL_PREFIXES
+    ):
+        return True
+
+    # TypeScript / JavaScript object methods.
+    #
+    # Examples:
+    #
+    # async reserveAmount(...) {
+    # async releaseReservedAmount(...) {
+    # public methodName(...) {
+    # private methodName(...) {
+    # protected methodName(...) {
+    # static methodName(...) {
+    # methodName(...) {
+    return bool(
+        TYPESCRIPT_METHOD_PATTERN.match(
+            stripped_line
+        )
     )
 
 

@@ -48,24 +48,56 @@ ACTION_WORDS = {
     "decrement",
 }
 
-
 def extract_keywords(query: str) -> list[str]:
+    """
+    Extract useful natural-language and code-aware keywords.
+
+    Examples:
+        "Where is balance.increment used?"
+        -> ["balance.increment", "balance", "increment", "used"]
+
+        "Where is createPaymentOrder implemented?"
+        -> ["createPaymentOrder", "implemented"]
+
+    Dotted code expressions are preserved as complete identifiers while
+    their individual components are also added for better code retrieval.
+    """
+
     tokens = re.findall(
         r"[A-Za-z_][A-Za-z0-9_.-]*",
-        query.lower(),
+        query,
     )
 
     keywords = []
 
     for token in tokens:
-        if token in STOP_WORDS:
+        token_lower = token.lower()
+
+        if token_lower in STOP_WORDS:
             continue
 
-        if len(token) < 2:
+        if len(token_lower) < 2:
             continue
 
-        if token not in keywords:
-            keywords.append(token)
+        # Preserve the original token for identifiers such as:
+        # createPaymentOrder, authMiddleware, balance.increment
+        if token_lower not in keywords:
+            keywords.append(token_lower)
+
+        # Also split dotted code expressions:
+        # balance.increment -> balance + increment
+        if "." in token:
+            parts = token.split(".")
+
+            for part in parts:
+                part_lower = part.lower()
+
+                if (
+                    len(part_lower) >= 2
+                    and part_lower not in STOP_WORDS
+                    and part_lower not in keywords
+                ):
+                    keywords.append(part_lower)
 
     return keywords
 
@@ -83,6 +115,49 @@ def extract_actions(query: str) -> list[str]:
         if keyword in ACTION_WORDS
     ]
 
+def extract_code_expressions(query: str) -> list[str]:
+    """
+    Extract likely code expressions from a user query.
+
+    Examples:
+        "Where is balance.increment used?"
+        -> ["balance.increment"]
+
+        "Where is tx.wallet.update implemented?"
+        -> ["tx.wallet.update"]
+
+        "Where is createPaymentOrder defined?"
+        -> ["createPaymentOrder"]
+
+    The function is intentionally conservative so ordinary natural-language
+    words are not treated as code expressions.
+    """
+
+    tokens = re.findall(
+        r"[A-Za-z_][A-Za-z0-9_.-]*",
+        query,
+    )
+
+    expressions = []
+
+    for token in tokens:
+        # Dotted expressions are strong indicators of code.
+        if "." in token:
+            parts = token.split(".")
+
+            if all(
+                part and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", part)
+                for part in parts
+            ):
+                if token.lower() not in expressions:
+                    expressions.append(token.lower())
+
+        # CamelCase identifiers are also likely code symbols.
+        elif re.search(r"[a-z][A-Z]", token):
+            if token.lower() not in expressions:
+                expressions.append(token.lower())
+
+    return expressions
 
 def calculate_keyword_score(
     content: str,
@@ -229,6 +304,102 @@ def calculate_action_score(
     return min(score / maximum_score, 1.0)
 
 
+def calculate_code_expression_score(
+    content: str,
+    expressions: list[str],
+) -> float:
+    """
+    Score a chunk based on exact or structural code-expression matches.
+
+    Examples:
+        balance.increment
+        -> matches:
+           balance: {
+               increment: ...
+           }
+
+        balance.decrement
+        -> matches:
+           balance: {
+               decrement: ...
+           }
+
+        tx.wallet.update
+        -> can match:
+           tx.wallet.update(...)
+    """
+
+    if not expressions:
+        return 0.0
+
+    content_lower = content.lower()
+    matched = 0
+
+    for expression in expressions:
+        expression = expression.lower().strip()
+
+        # ---------------------------------------------------------
+        # 1. Direct literal match
+        # ---------------------------------------------------------
+        literal_pattern = (
+            rf"(?<![a-zA-Z0-9_])"
+            rf"{re.escape(expression)}"
+            rf"(?![a-zA-Z0-9_])"
+        )
+
+        if re.search(literal_pattern, content_lower):
+            matched += 1
+            continue
+
+        # ---------------------------------------------------------
+        # 2. Structural object-operation match
+        #
+        # Example:
+        # balance.increment
+        #
+        # matches:
+        # balance: {
+        #     increment: ...
+        # }
+        # ---------------------------------------------------------
+        if "." in expression:
+            parts = expression.split(".")
+
+            if len(parts) == 2:
+                object_name, operation = parts
+
+                structural_pattern = (
+                    rf"\b{re.escape(object_name)}\s*:"
+                    rf"\s*\{{[^}}]{{0,500}}?"
+                    rf"\b{re.escape(operation)}\s*:"
+                )
+
+                if re.search(
+                    structural_pattern,
+                    content_lower,
+                    flags=re.DOTALL,
+                ):
+                    matched += 1
+                    continue
+
+        # ---------------------------------------------------------
+        # 3. Simple method-call match
+        #
+        # Example:
+        # tx.wallet.update
+        # matches:
+        # tx.wallet.update(...)
+        # ---------------------------------------------------------
+        if len(expression.split(".")) >= 2:
+            method_pattern = (
+                rf"\b{re.escape(expression)}\s*\("
+            )
+
+            if re.search(method_pattern, content_lower):
+                matched += 1
+                continue
+
+    return matched / len(expressions)
 def semantic_search(
     db: Session,
     repository_id,
@@ -359,9 +530,12 @@ def retrieve_hybrid_chunks(
     # 2. Extract keywords and actions
     # ---------------------------------------------------------
 
+   
     keywords = extract_keywords(query)
     actions = extract_actions(query)
+    code_expressions = extract_code_expressions(query)
 
+     
     # ---------------------------------------------------------
     # 3. Semantic search
     # ---------------------------------------------------------
@@ -436,6 +610,10 @@ def retrieve_hybrid_chunks(
             actions=actions,
         )
 
+        code_expression_score = calculate_code_expression_score(
+            content=chunk.content,
+            expressions=code_expressions,
+)
         # Initial weights:
         #
         # 60% semantic
@@ -447,6 +625,7 @@ def retrieve_hybrid_chunks(
             0.60 * semantic_similarity
             + 0.20 * keyword_score
             + 0.20 * action_score
+            + 0.20 * code_expression_score
         )
 
         results.append(
@@ -456,6 +635,7 @@ def retrieve_hybrid_chunks(
                 "semantic_similarity": semantic_similarity,
                 "keyword_score": keyword_score,
                 "action_score": action_score,
+                "code_expression_score": code_expression_score,
                 "hybrid_score": hybrid_score,
             }
         )
@@ -491,6 +671,7 @@ def retrieve_hybrid_chunks(
                 "semantic_similarity": result["semantic_similarity"],
                 "keyword_score": result["keyword_score"],
                 "action_score": result["action_score"],
+                "code_expression_score": result["code_expression_score"],
                 "hybrid_score": result["hybrid_score"],
                 "content": chunk.content,
             }
